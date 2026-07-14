@@ -125,13 +125,16 @@ export function Calendar({
           opacity: 0.5;
         }
       `}</style>
-      <DayPicker
+      {(() => {
+        const Picker = DayPicker as React.ComponentType<any>
+        return <Picker
         mode={mode as 'single' | 'range'}
         selected={selected}
         onSelect={onSelect as any}
         disabled={isDateDisabled}
         showOutsideDays={false}
-      />
+        />
+      })()}
     </div>
   )
 }

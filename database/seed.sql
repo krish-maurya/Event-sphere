@@ -1,116 +1,118 @@
--- EventVenue Database Schema and Seed Data
--- Run this in Supabase SQL Editor
+-- EventSphere production schema. Run this once in the Supabase SQL editor.
+-- Authentication is owned by Supabase Auth; do not insert passwords or demo users here.
+-- After creating your first Auth user, promote it once in the SQL editor:
+-- update public.profiles set role = 'admin' where email = 'your-admin@example.com';
 
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+create extension if not exists "uuid-ossp";
 
--- Users Table
-CREATE TABLE IF NOT EXISTS users (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  email VARCHAR(255) UNIQUE NOT NULL,
-  first_name VARCHAR(100) NOT NULL,
-  last_name VARCHAR(100) NOT NULL,
-  role VARCHAR(50) NOT NULL DEFAULT 'customer',
-  phone VARCHAR(20),
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+create type public.app_role as enum ('admin', 'manager', 'staff', 'customer');
+create type public.booking_status as enum ('pending', 'approved', 'in_planning', 'confirmed', 'completed', 'cancelled', 'rejected');
+create type public.task_status as enum ('todo', 'in_progress', 'blocked', 'completed');
+create type public.task_priority as enum ('low', 'medium', 'high', 'urgent');
+
+create table public.profiles (
+  id uuid primary key references auth.users(id) on delete cascade,
+  email text not null unique,
+  first_name text not null,
+  last_name text not null,
+  role public.app_role not null default 'customer',
+  phone text,
+  activation_code_hash text,
+  activated_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
 
--- Venues Table
-CREATE TABLE IF NOT EXISTS venues (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  name VARCHAR(255) NOT NULL,
-  location VARCHAR(255) NOT NULL,
-  capacity INTEGER NOT NULL,
-  price_per_head DECIMAL(10, 2) NOT NULL,
-  description TEXT,
-  amenities JSONB DEFAULT '[]',
-  rating DECIMAL(3, 2) DEFAULT 5.0,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+create table public.venues (
+  id uuid primary key default uuid_generate_v4(),
+  name text not null,
+  location text not null,
+  city text,
+  capacity integer not null check (capacity > 0),
+  price_per_head numeric(12,2) not null check (price_per_head >= 0),
+  description text,
+  amenities jsonb not null default '[]'::jsonb,
+  images jsonb not null default '[]'::jsonb,
+  rating numeric(3,2) not null default 0 check (rating between 0 and 5),
+  created_at timestamptz not null default now()
 );
 
--- Bookings Table
-CREATE TABLE IF NOT EXISTS bookings (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id UUID NOT NULL REFERENCES users(id),
-  venue_id UUID NOT NULL REFERENCES venues(id),
-  event_date DATE NOT NULL,
-  guest_count INTEGER NOT NULL,
-  decoration_theme VARCHAR(100),
-  catering_option VARCHAR(100),
-  entertainment_service VARCHAR(100),
-  special_requests TEXT,
-  total_price DECIMAL(12, 2) NOT NULL,
-  status VARCHAR(50) NOT NULL DEFAULT 'pending',
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+create table public.bookings (
+  id uuid primary key default uuid_generate_v4(),
+  customer_id uuid not null references public.profiles(id),
+  venue_id uuid not null references public.venues(id),
+  manager_id uuid references public.profiles(id),
+  event_date date not null,
+  guest_count integer not null check (guest_count > 0),
+  decoration_theme text,
+  catering_option text,
+  entertainment_service text,
+  special_requests text,
+  total_price numeric(12,2) not null check (total_price >= 0),
+  status public.booking_status not null default 'pending',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
 
--- Event Timeline Table
-CREATE TABLE IF NOT EXISTS event_timelines (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  booking_id UUID NOT NULL REFERENCES bookings(id),
-  manager_id UUID REFERENCES users(id),
-  phase VARCHAR(100),
-  start_date DATE,
-  end_date DATE,
-  progress INTEGER DEFAULT 0,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+create table public.tasks (
+  id uuid primary key default uuid_generate_v4(),
+  booking_id uuid not null references public.bookings(id) on delete cascade,
+  assigned_to uuid references public.profiles(id),
+  created_by uuid not null references public.profiles(id),
+  title text not null,
+  description text,
+  phase text not null default 'planning',
+  status public.task_status not null default 'todo',
+  priority public.task_priority not null default 'medium',
+  due_date date,
+  completed_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
 
--- Tasks Table
-CREATE TABLE IF NOT EXISTS tasks (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  timeline_id UUID NOT NULL REFERENCES event_timelines(id),
-  title VARCHAR(255) NOT NULL,
-  description TEXT,
-  assigned_to UUID REFERENCES users(id),
-  status VARCHAR(50) NOT NULL DEFAULT 'todo',
-  due_date DATE,
-  priority VARCHAR(20) DEFAULT 'medium',
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+create or replace function public.is_role(required_role public.app_role)
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (select 1 from public.profiles where id = auth.uid() and role = required_role)
+$$;
 
--- Vendors Table
-CREATE TABLE IF NOT EXISTS vendors (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  name VARCHAR(255) NOT NULL,
-  category VARCHAR(100) NOT NULL,
-  email VARCHAR(255),
-  phone VARCHAR(20),
-  rating DECIMAL(3, 2) DEFAULT 5.0,
-  availability BOOLEAN DEFAULT true,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+create or replace function public.handle_new_user()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  insert into public.profiles (id, email, first_name, last_name)
+  values (
+    new.id,
+    new.email,
+    coalesce(new.raw_user_meta_data ->> 'first_name', ''),
+    coalesce(new.raw_user_meta_data ->> 'last_name', '')
+  );
+  return new;
+end;
+$$;
 
--- Insert Admin Users
-INSERT INTO users (email, first_name, last_name, role, phone) VALUES
-  ('admin@eventvenue.com', 'Admin', 'User', 'admin', '1234567890'),
-  ('john.manager@eventvenue.com', 'John', 'Manager', 'manager', '1234567891'),
-  ('emma.staff@eventvenue.com', 'Emma', 'Staff', 'staff', '1234567892'),
-  ('michael.staff@eventvenue.com', 'Michael', 'Staff', 'staff', '1234567893'),
-  ('customer@eventvenue.com', 'Sarah', 'Customer', 'customer', '1234567894');
+create trigger on_auth_user_created after insert on auth.users for each row execute procedure public.handle_new_user();
 
--- Insert Venues
-INSERT INTO venues (name, location, capacity, price_per_head, description, amenities, rating) VALUES
-  ('Grand Ballroom Estate', 'Manhattan, NY', 500, 150.00, 'Luxurious ballroom with modern amenities', '["AC", "WiFi", "Parking", "Kitchen", "DJ"]', 4.9),
-  ('Riverside Garden Pavilion', 'Brooklyn, NY', 300, 85.00, 'Beautiful outdoor garden venue', '["Garden", "Outdoor", "Parking"]', 4.8),
-  ('Contemporary Loft Downtown', 'Manhattan, NY', 250, 120.00, 'Modern industrial loft', '["Skylights", "Kitchen", "Exposed Brick"]', 4.7),
-  ('Rustic Barn Retreat', 'Hudson Valley, NY', 200, 75.00, 'Charming country barn', '["Outdoor", "Lighting", "Accessible"]', 4.9),
-  ('Seaside Luxury Resort', 'East Hampton, NY', 400, 180.00, 'Premium beachfront venue', '["Ocean View", "Beach", "Spa"]', 5.0),
-  ('Historic Manor House', 'Queens, NY', 350, 95.00, 'Classic historic estate', '["Historic", "Gardens", "Multiple Rooms"]', 4.8);
+alter table public.profiles enable row level security;
+alter table public.venues enable row level security;
+alter table public.bookings enable row level security;
+alter table public.tasks enable row level security;
 
--- Insert Vendors
-INSERT INTO vendors (name, category, email, phone, rating, availability) VALUES
-  ('Premium Catering Co', 'catering', 'catering@premium.com', '555-0101', 4.9, true),
-  ('Elegant Florals', 'decoration', 'hello@elegant.com', '555-0102', 4.8, true),
-  ('Studio Lens Photography', 'photography', 'contact@lens.com', '555-0103', 4.9, true),
-  ('Live Events Entertainment', 'entertainment', 'bookings@live.com', '555-0104', 4.7, true),
-  ('Gourmet Delights Catering', 'catering', 'contact@gourmet.com', '555-0105', 4.8, true),
-  ('Garden Design Studio', 'decoration', 'design@garden.com', '555-0106', 4.6, true),
-  ('Professional Photographers', 'photography', 'hello@proph.com', '555-0107', 4.9, true),
-  ('DJ & Sound Services', 'entertainment', 'booking@dj.com', '555-0108', 4.7, true);
+create policy "profiles readable by signed in users" on public.profiles for select to authenticated using (true);
+create policy "users update own non-role profile" on public.profiles for update to authenticated using (id = auth.uid()) with check (id = auth.uid() and role = (select role from public.profiles where id = auth.uid()));
+create policy "admins manage profiles" on public.profiles for all to authenticated using (public.is_role('admin')) with check (public.is_role('admin'));
+create policy "venues are public" on public.venues for select using (true);
+create policy "admins manage venues" on public.venues for all to authenticated using (public.is_role('admin')) with check (public.is_role('admin'));
+create policy "customers create their bookings" on public.bookings for insert to authenticated with check (customer_id = auth.uid());
+create policy "customers see own bookings" on public.bookings for select to authenticated using (customer_id = auth.uid() or manager_id = auth.uid() or public.is_role('admin'));
+create policy "admins update bookings" on public.bookings for update to authenticated using (public.is_role('admin')) with check (public.is_role('admin'));
+create policy "managers update assigned bookings" on public.bookings for update to authenticated using (manager_id = auth.uid()) with check (manager_id = auth.uid());
+create policy "staff see assigned task bookings" on public.bookings for select to authenticated using (exists (select 1 from public.tasks t where t.booking_id = id and t.assigned_to = auth.uid()));
+create policy "task visibility follows assignment" on public.tasks for select to authenticated using (assigned_to = auth.uid() or created_by = auth.uid() or public.is_role('admin'));
+create policy "managers create tasks for their events" on public.tasks for insert to authenticated with check (created_by = auth.uid() and exists (select 1 from public.bookings b where b.id = booking_id and b.manager_id = auth.uid()));
+create policy "managers update their event tasks" on public.tasks for update to authenticated using (exists (select 1 from public.bookings b where b.id = booking_id and b.manager_id = auth.uid())) with check (exists (select 1 from public.bookings b where b.id = booking_id and b.manager_id = auth.uid()));
+create policy "staff update own task status" on public.tasks for update to authenticated using (assigned_to = auth.uid()) with check (assigned_to = auth.uid());
+create policy "admins manage tasks" on public.tasks for all to authenticated using (public.is_role('admin')) with check (public.is_role('admin'));
 
--- Create Indexes
-CREATE INDEX IF NOT EXISTS idx_bookings_user_id ON bookings(user_id);
-CREATE INDEX IF NOT EXISTS idx_bookings_venue_id ON bookings(venue_id);
-CREATE INDEX IF NOT EXISTS idx_bookings_status ON bookings(status);
-CREATE INDEX IF NOT EXISTS idx_event_timelines_booking_id ON event_timelines(booking_id);
-CREATE INDEX IF NOT EXISTS idx_tasks_timeline_id ON tasks(timeline_id);
+create index bookings_customer_id_idx on public.bookings(customer_id);
+create index bookings_manager_id_idx on public.bookings(manager_id);
+create index tasks_booking_id_idx on public.tasks(booking_id);
+create index tasks_assigned_to_idx on public.tasks(assigned_to);

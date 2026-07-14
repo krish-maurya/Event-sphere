@@ -6,14 +6,14 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { SignupSchema, type SignupInput } from '@/lib/schemas'
-import { useAppStore } from '@/lib/store'
+import { supabase } from '@/lib/supabase'
 import { AlertCircle, Eye, EyeOff, Loader2, CheckCircle2 } from 'lucide-react'
 
 export function SignupForm() {
   const router = useRouter()
   const [showPassword, setShowPassword] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const { signup, authError } = useAppStore()
+  const [authError, setAuthError] = useState<string | null>(null)
 
   const {
     register,
@@ -29,11 +29,11 @@ export function SignupForm() {
   const onSubmit = async (data: SignupInput) => {
     setIsSubmitting(true)
     try {
-      signup(data.email, data.password, data.firstName, data.lastName)
-      const store = useAppStore.getState()
-      if (store.isAuthenticated) {
-        router.push('/venues')
-      }
+      setAuthError(null)
+      const { data: result, error } = await supabase.auth.signUp({ email: data.email, password: data.password, options: { data: { first_name: data.firstName, last_name: data.lastName } } })
+      if (error) { setAuthError(error.message); return }
+      if (!result.session) { router.push('/auth/login?confirmation=sent'); return }
+      router.push('/venues')
     } finally {
       setIsSubmitting(false)
     }

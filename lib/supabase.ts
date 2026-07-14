@@ -1,19 +1,17 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+const configuredUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const configuredAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+const isHttpUrl = (value: string | undefined) => Boolean(value && /^https?:\/\//.test(value))
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing Supabase environment variables')
-}
+// A harmless local fallback lets Next build before deployment variables are added.
+// Every real data operation will still fail until valid Supabase credentials are configured.
+const supabaseUrl = isHttpUrl(configuredUrl) ? configuredUrl! : 'http://127.0.0.1:54321'
+const supabaseAnonKey = configuredAnonKey || 'development-anon-key'
+
+export const isSupabaseConfigured = isHttpUrl(configuredUrl) && Boolean(configuredAnonKey)
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
-
-// Admin client (use only on server-side)
-export const supabaseAdmin = createClient(
-  supabaseUrl,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || supabaseAnonKey
-)
 
 // Database types
 export type User = {

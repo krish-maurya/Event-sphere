@@ -1,10 +1,10 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { Star, MapPin, Users } from 'lucide-react'
-import type { Venue } from '@/lib/mockData'
+import type { VenueRow } from '@/lib/database'
 
 interface VenueCardProps {
-  venue: Venue
+  venue: VenueRow
 }
 
 export function VenueCard({ venue }: VenueCardProps) {
@@ -14,14 +14,14 @@ export function VenueCard({ venue }: VenueCardProps) {
         {/* Image Container */}
         <div className="relative h-64 overflow-hidden bg-gray-700">
           <Image
-            src={venue.images[0]}
+            src={venue.images[0] || '/placeholder.jpg'}
             alt={venue.name}
             fill
             className="object-cover group-hover:scale-105 transition-transform duration-300"
             sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
           />
           <div className="absolute top-4 right-4 bg-white text-black px-3 py-1 rounded-full text-sm font-semibold">
-            ${venue.pricePerHead}/head
+            ${venue.price_per_head}/head
           </div>
         </div>
 
@@ -48,7 +48,6 @@ export function VenueCard({ venue }: VenueCardProps) {
             <div className="flex items-center gap-1">
               <Star size={16} className="fill-gray-500 text-gray-500" />
               <span className="text-sm font-semibold text-white">{venue.rating}</span>
-              <span className="text-xs text-gray-500">({venue.reviews})</span>
             </div>
             <div className="flex items-center gap-1 text-sm text-gray-400">
               <Users size={16} />

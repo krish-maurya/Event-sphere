@@ -6,14 +6,16 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { LoginSchema, type LoginInput } from '@/lib/schemas'
-import { useAppStore } from '@/lib/store'
+import { supabase } from '@/lib/supabase'
+import { dashboardForRole } from '@/lib/roles'
+import { getMyProfile } from '@/lib/database'
 import { AlertCircle, Eye, EyeOff, Loader2 } from 'lucide-react'
 
 export function LoginForm() {
   const router = useRouter()
   const [showPassword, setShowPassword] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const { login, authError } = useAppStore()
+  const [authError, setAuthError] = useState<string | null>(null)
 
   const {
     register,
@@ -27,19 +29,17 @@ export function LoginForm() {
   const onSubmit = async (data: LoginInput) => {
     setIsSubmitting(true)
     try {
-      login(data.email, data.password)
-      // Check if login was successful
-      const store = useAppStore.getState()
-      if (store.isAuthenticated) {
-        reset()
-        router.push('/venues')
-      }
+      setAuthError(null)
+      const { error } = await supabase.auth.signInWithPassword({ email: data.email, password: data.password })
+      if (error) { setAuthError(error.message); return }
+      const profile = await getMyProfile()
+      reset()
+      router.push(profile ? dashboardForRole(profile.role) : '/venues')
     } finally {
       setIsSubmitting(false)
     }
   }
 
-  const store = useAppStore()
   const hasError = authError || errors.email?.message || errors.password?.message
 
   return (
@@ -130,16 +130,6 @@ export function LoginForm() {
         Create Account
       </Link>
 
-      {/* Demo Credentials Notice */}
-      <div className="p-4 bg-primary/10 border border-foreground/30 rounded-lg space-y-2">
-        <p className="text-sm font-semibold text-foreground">Demo Credentials</p>
-        <p className="text-xs text-muted-foreground">
-          <strong>Email:</strong> demo@example.com
-        </p>
-        <p className="text-xs text-muted-foreground">
-          <strong>Password:</strong> DemoPassword123
-        </p>
-      </div>
     </div>
   )
 }

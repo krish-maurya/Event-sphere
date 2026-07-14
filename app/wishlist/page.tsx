@@ -84,7 +84,7 @@ export default function WishlistPage() {
                           <div className="text-xs text-muted-foreground">Price per Guest</div>
                           <div className="flex items-center gap-2 text-foreground font-semibold">
                             <DollarSign size={16} />
-                            ${venue.pricePerGuest}
+                            ${venue.pricePerHead}
                           </div>
                         </div>
                       </div>

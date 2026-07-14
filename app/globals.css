@@ -97,6 +97,12 @@
   --sidebar-ring: oklch(0.708 0 0);
 }
 
+.custom-scrollbar { scrollbar-width: thin; scrollbar-color: #22c55e transparent; }
+.custom-scrollbar::-webkit-scrollbar { width: 8px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: linear-gradient(180deg, #22c55e, #15803d); border-radius: 20px; }
+.custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #16a34a; }
+
 .dark {
   color-scheme: dark;
   --background: #1a1a1a;
@@ -179,4 +185,28 @@
   html {
     @apply font-sans;
   }
+}
+
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #0e6f31 transparent;
+  scrollbar-gutter: stable;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #147a3a, #15803d);
+  border-radius: 20px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #16a34a;
 }
